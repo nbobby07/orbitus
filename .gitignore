@@ -1,0 +1,19 @@
+# CMake build folder
+build/
+out/
+bin/
+
+# VS Code specific settings
+.vscode/
+
+# Ignore any stray C++ build artifacts just in case
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.dll
+
+# OS generated files
+.DS_Store
+Thumbs.db
