@@ -30,6 +30,20 @@ public:
         glDeleteShader(fragment);
     }
 
+    Shader(const char* computePath) {
+        std::string computeCode = readFile(computePath);
+        const char* cShaderCode = computeCode.c_str();
+
+        unsigned int compute = compileShader(GL_COMPUTE_SHADER, cShaderCode);
+
+        ID = glCreateProgram();
+        glAttachShader(ID, compute);
+        glLinkProgram(ID);
+        checkCompileErrors(ID, "PROGRAM");
+
+        glDeleteShader(compute);
+    }
+
     void use() {
         glUseProgram(ID);
     }
@@ -54,16 +68,21 @@ private:
         unsigned int shader = glCreateShader(type);
         glShaderSource(shader, 1, &source, NULL);
         glCompileShader(shader);
-        checkCompileErrors(shader, type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT");
+        checkCompileErrors(shader, type == GL_VERTEX_SHADER ? "VERTEX" : (type == GL_FRAGMENT_SHADER ? "FRAGMENT" : "COMPUTE"));
         return shader;
     }
 
     void checkCompileErrors(unsigned int shader, std::string type) {
         int success;
         char infoLog[1024];
+        infoLog[0] = '\0'; // Prevents the crash by initializing the array!
+        
         if (type != "PROGRAM") {
             glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-            std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            if (!success) {
+                glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+                std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            }
         } else {
             glGetProgramiv(shader, GL_LINK_STATUS, &success);
             if (!success) {

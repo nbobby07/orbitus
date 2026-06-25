@@ -1,0 +1,52 @@
+#version 430 core
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec2 position;
+    vec2 velocity;
+    vec3 color;
+    float mass;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
+
+uniform float dt;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if(index >= particles.length()) return;
+
+    vec2 pos = particles[index].position;
+    vec2 vel = particles[index].velocity;
+    float mass = particles[index].mass;
+
+    vec2 force = vec2(0.0);
+    const float G = 0.00005;
+
+    
+    for(uint i = 0; i < particles.length(); ++i) {
+        if(i == index) continue;
+
+        vec2 otherPos = particles[i].position;
+        float otherMass = particles[i].mass;
+
+        vec2 dir = otherPos - pos;
+
+        float distSq = dot(dir, dir) + 0.01;
+        float dist = sqrt(distSq);
+
+        float f = (G * mass * otherMass) / distSq;
+        force += f * (dir / dist);
+    }
+    
+
+    vec2 acc = force/mass;
+    vel += acc * dt;
+    pos += vel * dt;
+
+    particles[index].velocity = vel;
+    particles[index].position = pos;
+}

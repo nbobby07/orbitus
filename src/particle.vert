@@ -1,12 +1,23 @@
 #version 430 core
-layout (location = 0) in vec2 aPos;
-layout (location = 1) in vec3 aColor;
+
+struct Particle {
+    vec2 position;
+    vec2 velocity;
+    vec3 color;
+    float mass;
+};
+
+layout(std430, binding = 0) buffer ParticleBuffer {
+    Particle particles[];
+};
 
 out vec3 ParticleColor;
 
 void main() {
-    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
-    ParticleColor = aColor;
-
-    gl_PointSize = 3.0;
+    Particle p = particles[gl_VertexID];
+    
+    gl_Position = vec4(p.position, 0.0, 1.0);
+    ParticleColor = p.color;
+    
+    gl_PointSize = clamp(p.mass * 2.0, 2.0, 20.0);
 }
