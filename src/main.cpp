@@ -34,7 +34,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Orbitus Engine - V0.3", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1024, 768, "Orbitus Engine - V0.3", NULL, NULL);
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
@@ -51,6 +51,8 @@ int main() {
                           "C:/Users/Noel/Desktop/orbitus/src/particle.frag");
 
     Shader computeShader("C:/Users/Noel/Desktop/orbitus/src/physics.comp");
+
+    Shader screenShader("C:/Users/Noel/Desktop/orbitus/src/screen.vert", "C:/Users/Noel/Desktop/orbitus/src/screen.frag");
     
     const int NUM_PARTICLES = 1000;
     std::vector<Particle> particles(NUM_PARTICLES);
@@ -88,8 +90,46 @@ int main() {
     unsigned int vao;
     glGenVertexArrays(1, &vao);
 
+    unsigned int pingpongFBO[2];
+    unsigned int pingpongColorbuffers[2];
+    glGenFramebuffers(2, pingpongFBO);
+    glGenTextures(2, pingpongColorbuffers);
+    
+    for(unsigned int i = 0; i < 2; i++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1024, 768, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    float quadVertices[] = {
+        -1.0f, 1.0f, 0.0f, 1.0f,
+        -1.0f, -1.0f, 0.0f, 0.0f,
+        1.0f, -1.0f, 1.0f, 0.0f, 
+        -1.0f, 1.0f, 0.0f, 1.0f,
+        1.0f, -1.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f
+    };
+    unsigned int quadVAO, quadVBO;
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0,2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+
     float dt = 0.016f;
     int colorTheme = 0;
+
+    bool first_iteration = true;
+    bool writeToFirst = true;
 
     while (!glfwWindowShouldClose(window)) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -119,8 +159,6 @@ int main() {
             mouseMass = 150000.0f;
         }
 
-
-
         computeShader.use();
         glUniform1f(glGetUniformLocation(computeShader.ID, "dt"), dt);
         glUniform2f(glGetUniformLocation(computeShader.ID, "mousePos"), mouseWorldX, mouseWorldY);
@@ -130,19 +168,35 @@ int main() {
         glDispatchCompute(numGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[writeToFirst ? 1 : 0]);
 
-        glClearColor(0.0f, 0.0f, 0.05f, 1.0f); 
-        glClear(GL_COLOR_BUFFER_BIT);
+        if (first_iteration) {
+            glClearColor(0.0f, 0.0f, 0.05f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            first_iteration = false;
+        }
 
+        screenShader.use();
+        glDisable(GL_BLEND);
+        glBindVertexArray(quadVAO);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[writeToFirst ? 0 : 1]);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         particleShader.use();
         glUniform2f(glGetUniformLocation(particleShader.ID, "cameraOffset"), cameraOffsetX, cameraOffsetY);
         glUniform1f(glGetUniformLocation(particleShader.ID, "cameraZoom"), cameraZoom);
         glUniform1i(glGetUniformLocation(particleShader.ID, "colorTheme"), colorTheme);
 
+        glEnable(GL_BLEND);
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
-        
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, pingpongFBO[writeToFirst ? 1 : 0]);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(0, 0, 1024, 768, 0, 0, 1024, 768, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+        writeToFirst = !writeToFirst;
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
