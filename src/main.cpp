@@ -15,8 +15,17 @@ struct Particle {
     float mass;
 };
 
+float cameraZoom = 1.0f;
+float cameraOffsetX = 0.0f;
+float cameraOffsetY = 0.0f;
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0,0,width,height);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+    cameraZoom += (float)yoffset * 0.1f;
+    if (cameraZoom < 0.1f) cameraZoom = 0.1f;
 }
 
 int main() {
@@ -28,6 +37,8 @@ int main() {
     GLFWwindow* window = glfwCreateWindow(800, 600, "Orbitus Engine - V0.3", NULL, NULL);
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    glfwSetScrollCallback(window, scroll_callback);
 
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
@@ -78,21 +89,60 @@ int main() {
     glGenVertexArrays(1, &vao);
 
     float dt = 0.016f;
+    int colorTheme = 0;
 
     while (!glfwWindowShouldClose(window)) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
+
+        float panSpeed = 0.02f / cameraZoom; 
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) cameraOffsetY -= panSpeed;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) cameraOffsetY += panSpeed;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) cameraOffsetX += panSpeed;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) cameraOffsetX -= panSpeed;
+
+        if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) colorTheme = 0; // Default
+        if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) colorTheme = 1; // Fire
+        if (glfwGetKey(window, GLFW_KEY_3) == GLFW_PRESS) colorTheme = 2; // Matrix
+
+        double mouseX, mouseY;
+        glfwGetCursorPos(window, &mouseX, &mouseY);
+        int width, height;
+        glfwGetWindowSize(window, &width, &height);
+        float normX = (mouseX / width) * 2.0f - 1.0f;
+        float normY = -((mouseY / height) * 2.0f - 1.0f); 
+        float mouseWorldX = (normX - cameraOffsetX) / cameraZoom;
+        float mouseWorldY = (normY - cameraOffsetY) / cameraZoom;
+
+        float mouseMass = 0.0f;
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            mouseMass = 150000.0f;
+        }
+
+
+
         computeShader.use();
         glUniform1f(glGetUniformLocation(computeShader.ID, "dt"), dt);
+        glUniform2f(glGetUniformLocation(computeShader.ID, "mousePos"), mouseWorldX, mouseWorldY);
+        glUniform1f(glGetUniformLocation(computeShader.ID, "mouseMass"), mouseMass);
         
         GLuint numGroups = (NUM_PARTICLES + 255) / 256;
         glDispatchCompute(numGroups, 1, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+
         glClearColor(0.0f, 0.0f, 0.05f, 1.0f); 
         glClear(GL_COLOR_BUFFER_BIT);
+
+
         particleShader.use();
+        glUniform2f(glGetUniformLocation(particleShader.ID, "cameraOffset"), cameraOffsetX, cameraOffsetY);
+        glUniform1f(glGetUniformLocation(particleShader.ID, "cameraZoom"), cameraZoom);
+        glUniform1i(glGetUniformLocation(particleShader.ID, "colorTheme"), colorTheme);
+
         glBindVertexArray(vao);
         glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
+        
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
